@@ -7,8 +7,10 @@
 # Requires the CARGO_REGISTRY_TOKEN secret.
 
 [workspace]
-# it is a library now, so diff the public API against the last crates.io release
-semver_check = true
+# semver checking is handled by the dedicated Semver CI workflow (which skips
+# cleanly before the first publish). release-plz's own semver_check stays off:
+# it hard-fails version determination when there is no crates.io baseline yet.
+semver_check = false
 # cut a git tag and a GitHub release on each version bump
 git_tag_enable = true
 git_release_enable = true
