@@ -47,13 +47,13 @@ jobs:
   # msrv -- keep building on the version advertised in Cargo.toml
   # ---------------------------------------------------------------------------
   msrv:
-    name: MSRV (1.74)
+    name: MSRV (1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.74"
+          toolchain: "1.85"
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked
 
@@ -113,9 +113,10 @@ jobs:
           tags: 3desco:ci
       - name: smoke test the image
         run: |
-          got=$(docker run --rm 3desco:ci --encode example)
-          echo "encode(example) = $got"
-          test "$got" = "d6ddbf2cfcc6be87"
+          # the binary prints "[*] Result: <hex>", so match the hex in output
+          out=$(docker run --rm 3desco:ci --encode example)
+          echo "$out"
+          echo "$out" | grep -qw d6ddbf2cfcc6be87
 
   # ---------------------------------------------------------------------------
   # gate -- single required check for branch protection
