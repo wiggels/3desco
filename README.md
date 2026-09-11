@@ -72,30 +72,30 @@ Decode a stored value (default mode):
 
 ```sh
 $ 3desco d6ddbf2cfcc6be87
-[*] Result: example
+example
 ```
 
 Encode a cleartext string:
 
 ```sh
 $ 3desco --encode example
-[*] Result: d6ddbf2cfcc6be87
+d6ddbf2cfcc6be87
 ```
 
 The round trip is exact:
 
 ```sh
 $ 3desco --encode secret
-[*] Result: bdb2c98561b8fa68
+bdb2c98561b8fa68
 $ 3desco bdb2c98561b8fa68
-[*] Result: secret
+secret
 ```
 
 Longer secrets span multiple blocks:
 
 ```sh
 $ 3desco --encode openaccess
-[*] Result: ad16e21fea85ac63ee88c925de45fa28
+ad16e21fea85ac63ee88c925de45fa28
 ```
 
 ### Options
