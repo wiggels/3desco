@@ -10,7 +10,7 @@
 use std::process::exit;
 
 use cbc::cipher::block_padding::NoPadding;
-use cbc::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use cbc::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use clap::Parser;
 
 type Tdes3CbcDec = cbc::Decryptor<des::TdesEde3>;
@@ -148,8 +148,11 @@ fn type3_decode(hex_str: &str, key: &[u8; 24], iv: [u8; 8], raw: bool) {
     }
 
     let mut buf = ct;
-    let cipher = Tdes3CbcDec::new(key.as_slice().into(), (&iv).into());
-    let Ok(pt) = cipher.decrypt_padded_mut::<NoPadding>(&mut buf) else {
+    let Ok(cipher) = Tdes3CbcDec::new_from_slices(key, &iv) else {
+        eprintln!("[ERR] Invalid key/IV length (unexpected).");
+        exit(-1);
+    };
+    let Ok(pt) = cipher.decrypt_padded::<NoPadding>(&mut buf) else {
         eprintln!("[ERR] Decryption failed (unexpected).");
         exit(-1);
     };
@@ -173,8 +176,11 @@ fn type3_encode(cleartext: &str, key: &[u8; 24], iv: [u8; 8]) {
     let padded_len = buf.len().div_ceil(8).max(1) * 8;
     buf.resize(padded_len, 0);
 
-    let cipher = Tdes3CbcEnc::new(key.as_slice().into(), (&iv).into());
-    let Ok(ct) = cipher.encrypt_padded_mut::<NoPadding>(&mut buf, padded_len) else {
+    let Ok(cipher) = Tdes3CbcEnc::new_from_slices(key, &iv) else {
+        eprintln!("[ERR] Invalid key/IV length (unexpected).");
+        exit(-1);
+    };
+    let Ok(ct) = cipher.encrypt_padded::<NoPadding>(&mut buf, padded_len) else {
         eprintln!("[ERR] Encryption failed (unexpected).");
         exit(-1);
     };
