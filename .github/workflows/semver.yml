@@ -1,0 +1,31 @@
+name: Semver
+
+# checks that public API changes to the library match the version bump. pre-1.0,
+# cargo's rules allow breaking changes on a minor bump (0.x -> 0.x+1). the action
+# diffs rustdoc JSON of HEAD against the latest crates.io release; before the
+# first publish there is no baseline and it is a no-op.
+#
+# locally:
+#   cargo install cargo-semver-checks
+#   cargo semver-checks
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/semver.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  semver:
+    name: cargo-semver-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: obi1kenobi/cargo-semver-checks-action@v2

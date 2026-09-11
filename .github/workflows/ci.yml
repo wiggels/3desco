@@ -96,6 +96,19 @@ jobs:
       - run: cargo doc --no-deps --locked
 
   # ---------------------------------------------------------------------------
+  # publish dry run -- catches "this will not actually publish" before the
+  # release workflow finds out the hard way
+  # ---------------------------------------------------------------------------
+  publish-dry-run:
+    name: cargo publish --dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --dry-run --locked
+
+  # ---------------------------------------------------------------------------
   # docker -- build the release image on every PR/push so a broken Dockerfile
   # fails ci here, not in the publish workflow. build only, no push.
   # ---------------------------------------------------------------------------
@@ -113,7 +126,7 @@ jobs:
           tags: 3desco:ci
       - name: smoke test the image
         run: |
-          # the binary prints "[*] Result: <hex>", so match the hex in output
+          # output is the bare value, so just match the expected hex
           out=$(docker run --rm 3desco:ci --encode example)
           echo "$out"
           echo "$out" | grep -qw d6ddbf2cfcc6be87
@@ -124,7 +137,7 @@ jobs:
   all-checks:
     name: all checks
     if: always()
-    needs: [test, msrv, clippy, fmt, docs, docker-build]
+    needs: [test, msrv, clippy, fmt, docs, publish-dry-run, docker-build]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all checks passed
@@ -134,6 +147,7 @@ jobs:
             || [ "${{ needs.clippy.result }}" != "success" ] \
             || [ "${{ needs.fmt.result }}" != "success" ] \
             || [ "${{ needs.docs.result }}" != "success" ] \
+            || [ "${{ needs.publish-dry-run.result }}" != "success" ] \
             || [ "${{ needs.docker-build.result }}" != "success" ]; then
             echo "One or more checks failed."
             exit 1

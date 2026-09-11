@@ -1,37 +1,11 @@
-//! Simple tool to decode and encode "type 3" reversible config passwords.
-//!
-//! The target platform stores these values as lowercase hex. Under the hood
-//! it calls OpenSSL's `DES_ede3_cbc_encrypt`: zero-pad the plaintext to an
-//! 8-byte block boundary, encrypt under a hardcoded 24-byte 3DES key with a
-//! hardcoded 8-byte IV (== K3), and emit the ciphertext as hex. Recoverable
-//! only when the optional user-supplied master key was NOT configured on the
-//! source device.
+//! Command-line front end for the `threedesco` library: decode and encode
+//! "type 3" reversible config passwords.
 
 use std::process::exit;
 
-use cbc::cipher::block_padding::NoPadding;
-use cbc::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use clap::Parser;
 
-type Tdes3CbcDec = cbc::Decryptor<des::TdesEde3>;
-type Tdes3CbcEnc = cbc::Encryptor<des::TdesEde3>;
-
-/// The 24-byte 3DES key hardcoded in the target platform's crypto library.
-/// Used for every reversible "type 3" value the device emits when no master
-/// key has been configured. Recovered from firmware and verified:
-/// "example" -> d6ddbf2cfcc6be87.
-#[rustfmt::skip]
-const TYPE3_KEY: [u8; 24] = [
-    0x21, 0x0f, 0x60, 0x6f, 0x12, 0x6c, 0x57, 0xb7,
-    0xab, 0x39, 0x6c, 0x8c, 0xde, 0x0a, 0x83, 0xa3,
-    0x37, 0xb4, 0xdf, 0xbd, 0x1b, 0x44, 0xd3, 0x1d,
-];
-
-/// IV is the low 8 bytes of the key (== K3). Same value for every device.
-#[rustfmt::skip]
-const TYPE3_IV: [u8; 8] = [
-    0x37, 0xb4, 0xdf, 0xbd, 0x1b, 0x44, 0xd3, 0x1d,
-];
+use threedesco::{decode, encode, parse_iv, parse_key, strip_trailing_zeros, TYPE3_IV, TYPE3_KEY};
 
 #[derive(Parser)]
 #[command(
@@ -61,137 +35,46 @@ struct Args {
     #[arg(long = "iv3")]
     iv3: Option<String>,
 
-    /// Show the raw plaintext bytes when decoding, without stripping the
-    /// trailing zero padding heuristically.
+    /// Show the raw plaintext bytes when decoding (hex line, then lossy UTF-8),
+    /// without stripping the trailing zero padding heuristically.
     #[arg(long = "raw", default_value_t = false)]
     raw: bool,
+}
+
+/// Print an error to stderr and exit with a failure status.
+fn fail(msg: &str) -> ! {
+    eprintln!("[ERR] {msg}");
+    exit(1);
 }
 
 fn main() {
     let args = Args::parse();
 
-    let key = resolve_key(args.key3.as_deref());
-    let iv = resolve_iv(args.iv3.as_deref());
+    let key = match args.key3.as_deref() {
+        None => TYPE3_KEY,
+        Some(s) => parse_key(s).unwrap_or_else(|e| fail(&format!("--key3: {e}"))),
+    };
+    let iv = match args.iv3.as_deref() {
+        None => TYPE3_IV,
+        Some(s) => parse_iv(s).unwrap_or_else(|e| fail(&format!("--iv3: {e}"))),
+    };
 
     if args.encode {
-        type3_encode(&args.value, &key, iv);
+        let ct = encode(args.value.as_bytes(), &key, &iv);
+        println!("{}", hex::encode(ct));
     } else {
-        type3_decode(&args.value, &key, iv, args.raw);
-    }
-}
+        let ciphertext = hex::decode(args.value.trim())
+            .unwrap_or_else(|e| fail(&format!("invalid type 3 hex: {e}")));
+        let plaintext = decode(&ciphertext, &key, &iv).unwrap_or_else(|e| fail(&e.to_string()));
 
-/// Resolve the 24-byte 3DES key, defaulting to the baked-in constant.
-fn resolve_key(key_hex: Option<&str>) -> [u8; 24] {
-    match key_hex {
-        None => TYPE3_KEY,
-        Some(s) => {
-            let raw = match hex::decode(s.trim()) {
-                Ok(k) => k,
-                Err(e) => {
-                    eprintln!("[ERR] Invalid --key3 hex: {e}");
-                    exit(-1);
-                }
-            };
-            match raw.len() {
-                24 => raw.as_slice().try_into().unwrap(),
-                16 => {
-                    let mut k = [0u8; 24];
-                    k[0..16].copy_from_slice(&raw);
-                    k[16..24].copy_from_slice(&raw[0..8]);
-                    k
-                }
-                n => {
-                    eprintln!("[ERR] --key3 must decode to 16 or 24 bytes (got {n}).");
-                    exit(-1);
-                }
-            }
+        if args.raw {
+            println!("{}", hex::encode(&plaintext));
+            println!("{}", String::from_utf8_lossy(&plaintext));
+        } else {
+            println!(
+                "{}",
+                String::from_utf8_lossy(strip_trailing_zeros(&plaintext))
+            );
         }
     }
-}
-
-/// Resolve the 8-byte IV, defaulting to the baked-in constant.
-fn resolve_iv(iv_hex: Option<&str>) -> [u8; 8] {
-    match iv_hex {
-        None => TYPE3_IV,
-        Some(s) => {
-            let raw = match hex::decode(s.trim()) {
-                Ok(k) => k,
-                Err(e) => {
-                    eprintln!("[ERR] Invalid --iv3 hex: {e}");
-                    exit(-1);
-                }
-            };
-            if raw.len() != 8 {
-                eprintln!("[ERR] --iv3 must decode to 8 bytes (got {}).", raw.len());
-                exit(-1);
-            }
-            raw.as_slice().try_into().unwrap()
-        }
-    }
-}
-
-/// Decode a "type 3" password.
-fn type3_decode(hex_str: &str, key: &[u8; 24], iv: [u8; 8], raw: bool) {
-    let ct = match hex::decode(hex_str.trim()) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("[ERR] Invalid type 3 hex: {e}");
-            exit(-1);
-        }
-    };
-    if ct.is_empty() || ct.len() % 8 != 0 {
-        eprintln!(
-            "[ERR] type 3 ciphertext must be a nonzero multiple of 8 bytes (got {}).",
-            ct.len()
-        );
-        exit(-1);
-    }
-
-    let mut buf = ct;
-    let Ok(cipher) = Tdes3CbcDec::new_from_slices(key, &iv) else {
-        eprintln!("[ERR] Invalid key/IV length (unexpected).");
-        exit(-1);
-    };
-    let Ok(pt) = cipher.decrypt_padded::<NoPadding>(&mut buf) else {
-        eprintln!("[ERR] Decryption failed (unexpected).");
-        exit(-1);
-    };
-    let out = pt.to_vec();
-
-    if raw {
-        println!("{}", hex::encode(&out));
-        println!("{}", String::from_utf8_lossy(&out));
-        return;
-    }
-
-    let stripped = strip_trailing_zeros(&out);
-    println!("{}", String::from_utf8_lossy(&stripped));
-}
-
-/// Encode a cleartext password into a "type 3" value.
-fn type3_encode(cleartext: &str, key: &[u8; 24], iv: [u8; 8]) {
-    // Zero-pad the plaintext up to an 8-byte block boundary, matching the
-    // device's `DES_ede3_cbc_encrypt` call.
-    let mut buf = cleartext.as_bytes().to_vec();
-    let padded_len = buf.len().div_ceil(8).max(1) * 8;
-    buf.resize(padded_len, 0);
-
-    let Ok(cipher) = Tdes3CbcEnc::new_from_slices(key, &iv) else {
-        eprintln!("[ERR] Invalid key/IV length (unexpected).");
-        exit(-1);
-    };
-    let Ok(ct) = cipher.encrypt_padded::<NoPadding>(&mut buf, padded_len) else {
-        eprintln!("[ERR] Encryption failed (unexpected).");
-        exit(-1);
-    };
-
-    println!("{}", hex::encode(ct));
-}
-
-fn strip_trailing_zeros(data: &[u8]) -> Vec<u8> {
-    let mut end = data.len();
-    while end > 0 && data[end - 1] == 0 {
-        end -= 1;
-    }
-    data[..end].to_vec()
 }

@@ -35,9 +35,11 @@ To use it from anywhere, copy it onto your `PATH`:
 cp target/release/3desco ~/.local/bin/    # or /usr/local/bin
 ```
 
-> **macOS note:** the binary name starts with a digit. Running it straight out
-> of the `target/` build directory can be killed by the OS; copy it to a normal
-> `bin` location (as above) — or run it via `cargo run` — and it works fine.
+Or install from crates.io:
+
+```sh
+cargo install threedesco
+```
 
 ## Docker
 
@@ -111,6 +113,23 @@ ad16e21fea85ac63ee88c925de45fa28
 
 The `--key3` / `--iv3` overrides let you point the same machinery at other
 deployments or key material without rebuilding.
+
+## Library
+
+The crate is also a library (`threedesco`) exposing the same codec:
+
+```rust
+use threedesco::{decode, encode, strip_trailing_zeros, TYPE3_IV, TYPE3_KEY};
+
+let ct = encode(b"example", &TYPE3_KEY, &TYPE3_IV);
+assert_eq!(hex::encode(&ct), "d6ddbf2cfcc6be87");
+
+let pt = decode(&ct, &TYPE3_KEY, &TYPE3_IV).unwrap();
+assert_eq!(strip_trailing_zeros(&pt), b"example");
+```
+
+`parse_key` and `parse_iv` parse hex overrides (the `--key3` / `--iv3` flags).
+Full docs: <https://docs.rs/threedesco>.
 
 ## Notes
 

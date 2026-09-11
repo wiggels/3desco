@@ -1,31 +1,19 @@
 # release-plz config. https://release-plz.dev/docs/config
 #
-# 3desco ships as a container image, not a crate. Publishing to crates.io is
-# disabled via the per-package `publish = false` below; release-plz still
-# manages the version bump, CHANGELOG, git tag, and GitHub release. The vX.Y.Z
-# tag then drives the Docker publish workflow.
+# threedesco is published to crates.io (as a library + binary). On each push to
+# main, release-plz reads the conventional-commit history and opens a release PR
+# bumping the version and CHANGELOG. Merging that PR runs `cargo publish`, cuts
+# the vX.Y.Z git tag and GitHub release; the tag then drives the Docker workflow.
+# Requires the CARGO_REGISTRY_TOKEN secret.
 
 [workspace]
-# not a library, so there is no public API to diff against a registry release
-semver_check = false
+# it is a library now, so diff the public API against the last crates.io release
+semver_check = true
 # cut a git tag and a GitHub release on each version bump
 git_tag_enable = true
 git_release_enable = true
 # human in the loop -- no auto merge of release PRs
 pr_branch_prefix = "release-plz-"
-
-# 3desco ships as a container image, not a crate. Disabling crates.io publishing
-# MUST be done here, not with `publish = false` in Cargo.toml: release-plz treats
-# a Cargo `publish = false` package as unmanaged and skips it entirely (no tag,
-# no GitHub release). This keeps release-plz processing the package -- bumping
-# the version, cutting the tag and GitHub release -- while never running
-# `cargo publish`.
-[[package]]
-name = "three-desco"
-release = true
-publish = false
-git_tag_enable = true
-git_release_enable = true
 
 [changelog]
 header = """# 3desco Changelog\n

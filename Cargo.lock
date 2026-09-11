@@ -223,7 +223,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "three-desco"
+name = "threedesco"
 version = "0.2.0"
 dependencies = [
  "cbc",
