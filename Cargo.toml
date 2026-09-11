@@ -26,4 +26,4 @@ lto = true
 clap = { version = "4", features = ["derive"] }
 hex = "0.4"
 des = "0.8"
-cbc = "0.1"
+cbc = "0.2"
