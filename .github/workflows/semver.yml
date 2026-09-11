@@ -1,0 +1,45 @@
+name: Semver
+
+# checks that public API changes to the library match the version bump. pre-1.0,
+# cargo's rules allow breaking changes on a minor bump (0.x -> 0.x+1). the action
+# diffs rustdoc JSON of HEAD against the latest crates.io release.
+#
+# before the first publish there is no baseline on crates.io, so the check is
+# skipped (cargo-semver-checks errors out with "not found in registry"); once the
+# crate is published it runs on every PR.
+#
+# locally:
+#   cargo install cargo-semver-checks
+#   cargo semver-checks
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/semver.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  semver:
+    name: cargo-semver-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check for a crates.io baseline
+        id: baseline
+        run: |
+          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          if cargo search "$name" --limit 1 | grep -q "^$name = "; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$name is not on crates.io yet; skipping semver-checks (no baseline)."
+          fi
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+        if: steps.baseline.outputs.published == 'true'

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.2.0](https://github.com/wiggels/3desco/releases/tag/v0.2.0) - 2026-09-11
 
+### Added
+
+- Public library API (`threedesco`) alongside the `3desco` binary: `encode`, `decode`, `parse_key`, `parse_iv`, `strip_trailing_zeros`, and the `TYPE3_KEY` / `TYPE3_IV` constants. Published to crates.io.
+
 ### Changed
 
 - [**breaking**] Print only the bare result value; drop the `[*] Result: ` prefix (and the `[*] ` prefix on `--raw` output) so output is pipe-friendly

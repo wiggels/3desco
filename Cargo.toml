@@ -1,5 +1,5 @@
 [package]
-name = "three-desco"
+name = "threedesco"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
@@ -10,9 +10,11 @@ repository = "https://github.com/wiggels/3desco"
 readme = "README.md"
 keywords = ["3des", "password", "decode", "cli", "security"]
 categories = ["command-line-utilities", "cryptography"]
-# NOTE: crates.io publishing is disabled in release-plz.toml (publish = false
-# there), NOT with Cargo's own `publish = false` -- the latter makes release-plz
-# skip the package entirely, so it would never tag or cut a GitHub release.
+# published to crates.io as a library (`threedesco`) plus a binary (`3desco`).
+# keep CI/build/container files out of the published .crate.
+exclude = [".github/", "Dockerfile", ".dockerignore", "release-plz.toml", "deny.toml"]
+
+# library target: src/lib.rs is picked up automatically as `threedesco`.
 
 [[bin]]
 name = "3desco"
