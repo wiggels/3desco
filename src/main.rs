@@ -159,13 +159,13 @@ fn type3_decode(hex_str: &str, key: &[u8; 24], iv: [u8; 8], raw: bool) {
     let out = pt.to_vec();
 
     if raw {
-        println!("[*] Raw plaintext bytes: {}", hex::encode(&out));
-        println!("[*] As lossy UTF-8:      {}", String::from_utf8_lossy(&out));
+        println!("{}", hex::encode(&out));
+        println!("{}", String::from_utf8_lossy(&out));
         return;
     }
 
     let stripped = strip_trailing_zeros(&out);
-    println!("[*] Result: {}", String::from_utf8_lossy(&stripped));
+    println!("{}", String::from_utf8_lossy(&stripped));
 }
 
 /// Encode a cleartext password into a "type 3" value.
@@ -185,7 +185,7 @@ fn type3_encode(cleartext: &str, key: &[u8; 24], iv: [u8; 8]) {
         exit(-1);
     };
 
-    println!("[*] Result: {}", hex::encode(ct));
+    println!("{}", hex::encode(ct));
 }
 
 fn strip_trailing_zeros(data: &[u8]) -> Vec<u8> {

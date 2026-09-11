@@ -17,11 +17,10 @@ fn run(args: &[&str]) -> String {
         out.status.code(),
         String::from_utf8_lossy(&out.stderr),
     );
-    let stdout = String::from_utf8(out.stdout).expect("stdout not utf-8");
-    stdout
-        .lines()
-        .find_map(|l| l.strip_prefix("[*] Result: "))
-        .unwrap_or_else(|| panic!("no result line in output: {stdout:?}"))
+    // output is the bare result value, no prefix or decoration
+    String::from_utf8(out.stdout)
+        .expect("stdout not utf-8")
+        .trim()
         .to_string()
 }
 
