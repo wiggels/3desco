@@ -1,15 +1,17 @@
 name: Docker
 
 # builds the minimal 3desco image and pushes it to the GitHub Container
-# Registry. tags follow the release: a push to main publishes :latest, a
-# vX.Y.Z tag (cut by release-plz) publishes :X.Y.Z, :X.Y, and :latest.
+# Registry. images are ONLY published for released versions: a vX.Y.Z tag (cut
+# by release-plz when a release PR merges) publishes :X.Y.Z, :X.Y, and :latest.
+# pushes to main do NOT publish an image -- :latest always points at a real
+# tagged release, never an arbitrary main commit. (The CI workflow still builds
+# the image on every PR/push to catch a broken Dockerfile, it just never pushes.)
 #
 # no secrets to configure -- GITHUB_TOKEN with packages:write is enough to
 # push to ghcr.io/wiggels/3desco.
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -42,11 +44,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/wiggels/3desco
+          # latest=auto tags :latest on the newest non-prerelease semver tag
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=sha,format=short
 
       - name: Build and push
         uses: docker/build-push-action@v6
