@@ -106,7 +106,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
+      # before the first crates.io publish, release-pr cannot diff against a
+      # registry baseline ("failed to retrieve difference") -- skip it until the
+      # crate exists. the release job below performs the initial publish.
+      - name: Check for a crates.io baseline
+        id: baseline
+        run: |
+          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          if cargo search "$name" --limit 1 | grep -q "^$name = "; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$name not on crates.io yet; skipping release-pr (release job does the first publish)."
+          fi
       - name: Run release-plz
+        if: steps.baseline.outputs.published == 'true'
         uses: release-plz/action@v0.5
         with:
           command: release-pr
