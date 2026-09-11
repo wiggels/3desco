@@ -1,0 +1,49 @@
+name: Audit
+
+# rustsec advisory scan of the dependency tree. runs:
+#
+# * on any push/pr that touches Cargo.toml or Cargo.lock
+# * daily at 06:00 utc for advisories published against already-pinned deps
+#
+# a failure means a dep has a published vuln -- bump it, or add an
+# [advisories.ignore] entry in deny.toml with a justification.
+
+on:
+  push:
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - ".github/workflows/audit.yml"
+      - "deny.toml"
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - ".github/workflows/audit.yml"
+      - "deny.toml"
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+  checks: write
+
+jobs:
+  audit:
+    name: cargo-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans licenses sources advisories

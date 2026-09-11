@@ -1,0 +1,52 @@
+# release-plz config. https://release-plz.dev/docs/config
+#
+# 3desco ships as a container image, not a crate. `publish = false` in
+# Cargo.toml means release-plz never runs `cargo publish`; it only manages the
+# version bump, CHANGELOG, git tag, and GitHub release. The vX.Y.Z tag then
+# drives the Docker publish workflow.
+
+[workspace]
+# not a library, so there is no public API to diff against a registry release
+semver_check = false
+# cut a git tag and a GitHub release on each version bump
+git_tag_enable = true
+git_release_enable = true
+# human in the loop -- no auto merge of release PRs
+pr_branch_prefix = "release-plz-"
+
+[changelog]
+header = """# 3desco Changelog\n
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+body = """
+## [{{ version | trim_start_matches(pat="v") }}]\
+    {%- if release_link -%}\
+        ({{ release_link }})\
+    {% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.breaking %}[**breaking**] {% endif %}\
+    {{ commit.message | upper_first }}\
+    {% if commit.links %} ({% for link in commit.links %}[{{ link.text }}]({{ link.href }}){% if not loop.last %}, {% endif %}{% endfor %}){% endif %}
+{%- endfor %}
+{% endfor %}
+"""
+trim = true
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^add", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^perf", group = "Performance" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^style", group = "Changed" },
+    { message = "^doc", group = "Documentation" },
+    { message = "^test", group = "Tests" },
+    { message = "^chore\\(deps\\)", group = "Dependencies" },
+    { message = "^chore", skip = true },
+    { message = "^ci", skip = true },
+    { body = ".*security", group = "Security" },
+]

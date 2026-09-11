@@ -1,0 +1,111 @@
+name: Release
+
+# release-plz automates versioning from conventional commits. because this
+# project ships as a container image, NOT a crate, cargo publish is disabled
+# (publish = false in Cargo.toml). release-plz still:
+#
+# * on every push to main, opens/updates a "chore: release vX.Y.Z" PR that
+#   bumps the version in Cargo.toml, updates CHANGELOG.md, and the lockfile
+# * merging that PR creates the vX.Y.Z git tag and a GitHub release
+#
+# the tag then triggers docker.yml, which builds and pushes the image tagged
+# with that version.
+#
+# ## one time setup
+#
+# 1. settings -> actions -> general -> workflow permissions -> read and write
+# 2. (recommended) a fine-grained PAT with contents:write + pull_requests:write
+#    stored as secret RELEASE_PLZ_TOKEN, so the release PR's push triggers CI.
+#    GITHUB_TOKEN also works but will not start other workflows on the PR.
+# 3. branch protection on main requiring the "all checks" gate.
+#
+# no crates.io token is needed -- nothing is published to a registry.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # preflight -- block a release if the tree is red
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: preflight (gate release on tests + audit)
+    if: ${{ github.repository_owner == 'wiggels' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings -W clippy::pedantic
+      - name: cargo test
+        run: cargo test --all-targets --locked
+      - name: cargo deny check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  # ---------------------------------------------------------------------------
+  # create the tag + GitHub release when the release PR is merged
+  # ---------------------------------------------------------------------------
+  release-plz-release:
+    name: release-plz release
+    if: ${{ github.repository_owner == 'wiggels' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # open / update the next release PR. idempotent, not gated on preflight --
+  # opening a PR is harmless when the tree is red and the PR gets its own CI.
+  # ---------------------------------------------------------------------------
+  release-plz-pr:
+    name: release-plz PR
+    if: ${{ github.repository_owner == 'wiggels' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}

@@ -1,0 +1,11 @@
+# keep the build context tiny -- only Cargo manifests and src are copied in
+target
+.git
+.github
+*.md
+Dockerfile
+.dockerignore
+.gitignore
+deny.toml
+release-plz.toml
+CHANGELOG.md

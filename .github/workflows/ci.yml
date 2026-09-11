@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # test -- stable on linux + macos, plus one beta job for early breakage.
+  # 3desco is pure Rust with no platform-specific code, so both OSes run the
+  # full suite (the README's exact round-trip vectors live in tests/).
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.rust }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            rust: beta
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo build
+        run: cargo build --all-targets --locked
+      - name: cargo test
+        run: cargo test --all-targets --locked
+
+  # ---------------------------------------------------------------------------
+  # msrv -- keep building on the version advertised in Cargo.toml
+  # ---------------------------------------------------------------------------
+  msrv:
+    name: MSRV (1.74)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.74"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked
+
+  # ---------------------------------------------------------------------------
+  # lints
+  # ---------------------------------------------------------------------------
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --locked -- -D warnings -W clippy::pedantic
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  # ---------------------------------------------------------------------------
+  # docs -- -D warnings so a broken intra-doc link fails ci
+  # ---------------------------------------------------------------------------
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps --locked
+
+  # ---------------------------------------------------------------------------
+  # docker -- build the release image on every PR/push so a broken Dockerfile
+  # fails ci here, not in the publish workflow. build only, no push.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: docker build (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: 3desco:ci
+      - name: smoke test the image
+        run: |
+          got=$(docker run --rm 3desco:ci --encode example)
+          echo "encode(example) = $got"
+          test "$got" = "d6ddbf2cfcc6be87"
+
+  # ---------------------------------------------------------------------------
+  # gate -- single required check for branch protection
+  # ---------------------------------------------------------------------------
+  all-checks:
+    name: all checks
+    if: always()
+    needs: [test, msrv, clippy, fmt, docs, docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all checks passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ] \
+            || [ "${{ needs.msrv.result }}" != "success" ] \
+            || [ "${{ needs.clippy.result }}" != "success" ] \
+            || [ "${{ needs.fmt.result }}" != "success" ] \
+            || [ "${{ needs.docs.result }}" != "success" ] \
+            || [ "${{ needs.docker-build.result }}" != "success" ]; then
+            echo "One or more checks failed."
+            exit 1
+          fi
+          echo "All checks passed."
