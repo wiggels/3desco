@@ -1,0 +1,29 @@
+[package]
+name = "three-desco"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Simple tool to decode/encode \"type 3\" reversible config passwords"
+authors = ["Hunter Wigelsworth <wiggels@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/wiggels/3desco"
+readme = "README.md"
+keywords = ["3des", "password", "decode", "cli", "security"]
+categories = ["command-line-utilities", "cryptography"]
+# not a crates.io package -- shipped as a container image, so release-plz tags
+# and cuts a GitHub release but never runs `cargo publish`
+publish = false
+
+[[bin]]
+name = "3desco"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+des = "0.8"
+cbc = "0.1"
